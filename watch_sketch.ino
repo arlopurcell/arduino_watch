@@ -34,18 +34,21 @@ enum MenuMode {
   Minute,
   Day,
   Month,
-  Year
+  Year,
+  Style
 };
 MenuMode menuMode = Hour;
 
 enum DisplayMode {
-  Normal
+  Normal12,
+  Normal24
   // TODO Text
+  // TODO Text am/pm
 };
-DisplayMode displayMode = Normal;
+DisplayMode displayMode = Normal12;
 
 
-static const uint8_t monthDays[]={31,28,31,30,31,30,31,31,30,31,30,31}; // API starts months from 1, this array starts from 0
+static const uint8_t monthDays[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}; // API starts months from 1, this array starts from 0
 static const int SELECT_BOX_STROKE = 2;
 
 void setup() {
@@ -53,7 +56,7 @@ void setup() {
   pinMode(selectButtonPin, OUTPUT);
   pinMode(menuButtonPin, OUTPUT);
 
-  attachInterrupt(digitalPinToInterrupt(calendarButtonPin),calendarButtonISR, RISING);
+  attachInterrupt(digitalPinToInterrupt(calendarButtonPin), calendarButtonISR, RISING);
   attachInterrupt(digitalPinToInterrupt(selectButtonPin), selectButtonISR, RISING);
   attachInterrupt(digitalPinToInterrupt(menuButtonPin), menuButtonISR, RISING);
 
@@ -69,12 +72,12 @@ void setup() {
 
 void loop() {
   if (isMenuHolding) {
-     if (digitalRead(menuButtonPin) == LOW) {
+    if (digitalRead(menuButtonPin) == LOW) {
       isMenuHolding = false;
     } else if (millis() - menuDownStart > MENU_HOLD_DELAY) {
       isMenuHolding = false;
       isMenuMode != isMenuMode;
-    } 
+    }
   }
 
   int delayDuration;
@@ -83,11 +86,11 @@ void loop() {
   } else {
     delayDuration = 500;
   }
-  
+
   if (showingCalendar && millis() - showCalendarStart > SHOW_DATE_DELAY) {
     showingCalendar = false;
   }
-  
+
   display.fillRect(0, 31, display.width(), display.height() - 31, WHITE);
   display.setTextColor(BLACK);
 
@@ -100,15 +103,26 @@ void loop() {
 
   time_t t = now();
   char buffer[50];
-  if (showCalendar) {
+  if (isMenuMode && menuMode == Style) {
+    display.setTextSize(3);
+    display.setCursor(5, 100);
     switch (displayMode) {
+      case Normal12:
+        display.print("12 hour digital"); break;
+      case Normal24:
+        display.print("24 hour digital"); break;
+    }
+  } else if (showCalendar) {
+    switch (displayMode) {
+      case Normal12:
+      case Normal24:
         display.setTextSize(2);
-        display.setCursor(5, 5);
+        display.setCursor(5, 20);
 
         // TODO center?
-        printField(dayStr(weekday(t)));
+        display.print(dayStr(weekday(t)));
         display.print(",\n");
-        
+
         printField(monthStr(month(t)), isMenuMode && menuMode == Month);
         display.print(" ");
         sprintf(buffer, "%d", day(t));
@@ -118,12 +132,30 @@ void loop() {
         sprintf(buffer, "%d", year(t));
         printField(buffer, isMenuMode && menuMode == Year);
         break;
-    }      
+    }
   } else {
     switch (displayMode) {
-      case Normal:     
+      case Normal12:
         display.setTextSize(2);
-        display.setCursor(5, 5);
+        display.setCursor(5, 20);
+
+        sprintf(buffer, ":% 2d", hourFormat12(t));
+        printField(buffer, isMenuMode && menuMode == Hour);
+        display.print(":");
+
+        sprintf(buffer, "%02d", minute(t));
+        printField(buffer, isMenuMode && menuMode == Minute);
+
+        display.setTextSize(1);
+        sprintf(buffer, ":%d\n", second(t));
+        display.print(buffer);
+
+        sprintf(buffer, "%s", isAM(t) ? "AM" : "PM");
+        printField(buffer, isMenuMode && menuMode == Hour);
+        break;
+      case Normal24:
+        display.setTextSize(2);
+        display.setCursor(5, 20);
 
         sprintf(buffer, "%02d", hour(t));
         printField(buffer, isMenuMode && menuMode == Hour);
@@ -131,31 +163,29 @@ void loop() {
 
         sprintf(buffer, "%02d", minute(t));
         printField(buffer, isMenuMode && menuMode == Minute);
-        
+
         display.setTextSize(1);
         sprintf(buffer, ":%d", second(t));
         display.print(buffer);
         break;
-    }  
+    }
   }
-  
+
   display.refresh();
   delay(delayDuration);
 }
 
-void printField(char* value) {
-  printField(value, false);
-}
-
 void printField(char* value, bool selected) {
-  uint16_t x = display.getCursorX();
-  uint16_t y = display.getCursorY();
-  int16_t rect_x, rect_y;
-  uint16_t rect_w, rect_h;
-  display.getTextBounds(value, x, y, &rect_x, &rect_y, &rect_w, &rect_h);
-
-  display.fillRect(rect_x - SELECT_BOX_STROKE, rect_y - SELECT_BOX_STROKE, rect_w + 2 * SELECT_BOX_STROKE, rect_h + 2 * SELECT_BOX_STROKE, BLACK);
-  display.fillRect(rect_x , rect_y, rect_w , rect_h, WHITE);
+  if (selected) {
+    uint16_t x = display.getCursorX();
+    uint16_t y = display.getCursorY();
+    int16_t rect_x, rect_y;
+    uint16_t rect_w, rect_h;
+    display.getTextBounds(value, x, y, &rect_x, &rect_y, &rect_w, &rect_h);
+  
+    display.fillRect(rect_x - SELECT_BOX_STROKE, rect_y - SELECT_BOX_STROKE, rect_w + 2 * SELECT_BOX_STROKE, rect_h + 2 * SELECT_BOX_STROKE, BLACK);
+    display.fillRect(rect_x , rect_y, rect_w , rect_h, WHITE);
+  }
   display.print(value);
 }
 
@@ -174,7 +204,7 @@ void menuButtonISR() {
       case Month:
         menuMode = Year; break;
       case Year:
-            menuMode = Hour; break;
+        menuMode = Hour; break;
     }
   }
 }
@@ -207,6 +237,14 @@ void selectButtonISR() {
         break;
       case Year:
         new_year += 1;
+        break;
+      case Style:
+        switch (displayMode) {
+          case Normal24:
+            displayMode = Normal12; break;
+          case Normal12:
+            displayMode = Normal24; break;
+        }
         break;
     }
     setTime(new_hour, new_minute, 0, new_day, new_month, new_year);
