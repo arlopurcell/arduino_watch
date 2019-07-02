@@ -40,12 +40,11 @@ enum MenuMode {
 MenuMode menuMode = Hour;
 
 enum DisplayMode {
-  Normal12,
-  Normal24
+  Normal
   // TODO Text
-  // TODO Text am/pm
 };
 DisplayMode displayMode = Normal12;
+bool clock24 = false;
 
 
 static const uint8_t monthDays[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}; // API starts months from 1, this array starts from 0
@@ -107,15 +106,43 @@ void loop() {
     display.setTextSize(3);
     display.setCursor(5, 100);
     switch (displayMode) {
-      case Normal12:
-        display.print("12 hour digital"); break;
-      case Normal24:
-        display.print("24 hour digital"); break;
-    }
+      case Normal:
+        if (clock24) {
+          display.print("24 hour digital");
+        } else {
+          display.print("12 hour digital");
+        }
+        break;
+      case Text:
+        if (clock24) {
+          display.print("24 hour text");
+        } else {
+          display.print("12 hour text");
+        }
+        break;
+      }
   } else if (showCalendar) {
     switch (displayMode) {
-      case Normal12:
-      case Normal24:
+      case Text:
+        if (!menuMode) {
+          display.setTextSize(2);
+          display.setCursor(5, 20);
+  
+          String s = String(dayStr(weekday(t)));
+          s.concat(", ");
+  
+          s.concat(monthStr(month(t)));
+          s.concat(' ');
+          
+          s.concat(numberToText(day(t), true));
+          s.concat(", ");
+
+          s.concat(numberToText(year(t), false));
+
+          display.print(s);
+          break;
+        }
+      case Normal:
         display.setTextSize(2);
         display.setCursor(5, 20);
 
@@ -135,11 +162,41 @@ void loop() {
     }
   } else {
     switch (displayMode) {
-      case Normal12:
+      case Text:
+        if (!menuMode) {
+          display.setTextSize(2);
+          display.setCursor(5, 20);
+
+          int hours = clock24 ? hour(t) : hourFormat12(t);
+          int minutes = minute(t);
+          String s = numberToText(, false);
+          s.concat(' ');
+          if (minutes < 10) {
+            s.concat("oh ");
+          }
+          s += numberToText(minutes, false);
+          if (!clock24) {
+            if (isAM(t)) {
+              s.concat(" in the morning");
+            } else if (hours == 12 || hours < 5) {
+              s.concat(" in the afternoon");
+            } else if (hours < 10) {
+              s.concat(" in the evening");
+            } else {
+              s.concat(" at night");
+            }
+          }
+          display.print(s);
+        }
+      case Normal:
         display.setTextSize(2);
         display.setCursor(5, 20);
 
-        sprintf(buffer, ":% 2d", hourFormat12(t));
+        if (clock24) {
+          sprintf(buffer, "%02d", hour(t));
+        } else {
+          sprintf(buffer, ":% 2d", hourFormat12(t));
+        }
         printField(buffer, isMenuMode && menuMode == Hour);
         display.print(":");
 
@@ -150,29 +207,75 @@ void loop() {
         sprintf(buffer, ":%d\n", second(t));
         display.print(buffer);
 
-        sprintf(buffer, "%s", isAM(t) ? "AM" : "PM");
-        printField(buffer, isMenuMode && menuMode == Hour);
-        break;
-      case Normal24:
-        display.setTextSize(2);
-        display.setCursor(5, 20);
-
-        sprintf(buffer, "%02d", hour(t));
-        printField(buffer, isMenuMode && menuMode == Hour);
-        display.print(":");
-
-        sprintf(buffer, "%02d", minute(t));
-        printField(buffer, isMenuMode && menuMode == Minute);
-
-        display.setTextSize(1);
-        sprintf(buffer, ":%d", second(t));
-        display.print(buffer);
+        if (!clock24) {
+          sprintf(buffer, "%s", isAM(t) ? "AM" : "PM");
+          printField(buffer, isMenuMode && menuMode == Hour);
+        }
         break;
     }
   }
 
   display.refresh();
   delay(delayDuration);
+}
+
+String numberToText(int n, bool ordinal) {
+  if (n > 100) {
+    String s = numberToText(n / 100, false);
+    s.concat(' ');
+    return s + numberToText(n % 100, ordinal);
+  }
+  switch (n) {
+    case 1:
+      return ordinal ? "first" : "one";
+    case 2:
+      return ordinal ? "second" : "two";
+    case 3:
+      return ordinal ? "third" : "three";
+    case 4:
+      return ordinal ? "fourth" : "four";
+    case 5:
+      return ordinal ? "fifth" : "five";
+    case 6:
+      return ordinal ? "sixth" : "six";
+    case 7:
+      return ordinal ? "seventh" : "seven";
+    case 8:
+      return ordinal ? "eighth" : "eight";
+    case 9:
+      return ordinal ? "ninth" : "nine";
+    case 10:
+      return ordinal ? "tenth" : "ten";
+    case 11:
+      return ordinal ? "eleventh" : "eleven";
+    case 12:
+      return ordinal ? "twelfth" : "twelve";
+    case 13:
+      return ordinal ? "thirteenth" : "thirteen";
+    case 15:
+      return ordinal ? "fifteenth" : "fifteen";
+    default:
+      if (n < 20) {
+        String s = numberToText(n - 10, false);
+        s.concat("teen");
+        if (ordinal) {
+          s.concat("th");
+        }
+      } else if (n == 20) {
+        return ordinal ? "twentieth" : "twenty";
+      } else if (n == 30) {
+        return ordinal ? "thirtieth" : "thirty";
+      } else if (n == 40) {
+        return ordinal ? "fortieth" : "forty";
+      } else if (n == 50) {
+        return ordinal ? "fiftieth" : "fifty";
+      } else {
+        String s = numberToText(n / 10 * 10, false);
+        s.concat(' ');
+        return s + numberToText(n % 10, ordinal);
+      }
+      break;
+  }
 }
 
 void printField(char* value, bool selected) {
@@ -240,10 +343,22 @@ void selectButtonISR() {
         break;
       case Style:
         switch (displayMode) {
-          case Normal24:
-            displayMode = Normal12; break;
-          case Normal12:
-            displayMode = Normal24; break;
+          case Normal:
+            if (clock24) {
+              displayMode = Text;
+              clock24 = false;
+            } else {
+              clock24 = true;
+            }
+            break;
+          case Text:
+            if (clock24) {
+              displayMode = Normal;
+              clock24 = false;
+            } else {
+              clock24 = true;
+            }
+            break;
         }
         break;
     }
