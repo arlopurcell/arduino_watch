@@ -112,16 +112,19 @@ String numberToText(int n, bool ordinal) {
 }
 
 void printField(char* value, bool selected) {
-  if (selected) {
     uint16_t x = display.getCursorX();
     uint16_t y = display.getCursorY();
     int16_t rect_x, rect_y;
     uint16_t rect_w, rect_h;
     display.getTextBounds(value, x, y, &rect_x, &rect_y, &rect_w, &rect_h);
   
-    display.fillRect(rect_x - SELECT_BOX_STROKE, rect_y - SELECT_BOX_STROKE, rect_w + 2 * SELECT_BOX_STROKE, rect_h + 2 * SELECT_BOX_STROKE, BLACK);
-    display.fillRect(rect_x , rect_y, rect_w , rect_h, WHITE);
-  }
+    if (selected) {
+        display.fillRect(rect_x - SELECT_BOX_STROKE, rect_y - SELECT_BOX_STROKE, rect_w + 2 * SELECT_BOX_STROKE, rect_h + 2 * SELECT_BOX_STROKE, BLACK);
+        display.fillRect(rect_x , rect_y, rect_w , rect_h, WHITE);
+    } else {
+        display.fillRect(rect_x - SELECT_BOX_STROKE, rect_y - SELECT_BOX_STROKE, rect_w + 2 * SELECT_BOX_STROKE, rect_h + 2 * SELECT_BOX_STROKE, WHITE);
+    }
+
   display.print(value);
 }
 
@@ -255,7 +258,8 @@ void loop() {
   char buffer[50];
   if (isMenuMode && menuMode == Style) {
     display.setTextSize(3);
-    display.setCursor(5, 100);
+    display.setCursor(0, 100);
+    display.clearDisplay();
     switch (displayMode) {
       case Normal:
         if (clock24) {
@@ -290,23 +294,28 @@ void loop() {
 
           s.concat(numberToText(year(t), false));
 
+          display.clearDisplay();
           display.print(s);
           break;
         }
       case Normal:
         display.setTextSize(2);
-        display.setCursor(5, 20);
+        display.setCursor(0, 70);
 
         // TODO center?
-        display.print(dayStr(weekday(t)));
-        display.print(",\n");
+        sprintf(buffer, "%s,", dayStr(weekday(t)));
+        printField(buffer, false);
 
+        display.setCursor(0, 90);
         printField(monthStr(month(t)), isMenuMode && menuMode == Month);
-        display.print(" ");
-        sprintf(buffer, "%d", day(t));
-        printField(buffer, isMenuMode && menuMode == Day);
-        display.print(",\n");
 
+        sprintf(buffer, ":");
+        printField(buffer, false);
+
+        sprintf(buffer, "%d,", day(t));
+        printField(buffer, isMenuMode && menuMode == Day);
+
+        display.setCursor(20, 110);
         sprintf(buffer, "%d", year(t));
         printField(buffer, isMenuMode && menuMode == Year);
         break;
@@ -349,18 +358,21 @@ void loop() {
           sprintf(buffer, "%2d", hourFormat12(t));
         }
         printField(buffer, isMenuMode && menuMode == Hour);
-        display.print(":");
+
+        sprintf(buffer, ":");
+        printField(buffer, false);
 
         sprintf(buffer, "%02d", minute(t));
         printField(buffer, isMenuMode && menuMode == Minute);
 
         display.setTextSize(1);
         sprintf(buffer, ":%d\n", second(t));
-        display.print(buffer);
+        printField(buffer, false);
 
         if (!clock24) {
-          sprintf(buffer, "%s", isAM(t) ? "AM" : "PM");
-          printField(buffer, isMenuMode && menuMode == Hour);
+            display.setCursor(100, 85);
+            sprintf(buffer, "%s", isAM(t) ? "AM" : "PM");
+            printField(buffer, isMenuMode && menuMode == Hour);
         }
         break;
     }
