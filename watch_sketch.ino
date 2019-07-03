@@ -27,21 +27,23 @@ volatile bool isMenuHolding;
 volatile unsigned long showCalendarStart;
 volatile bool showingCalendar = false;
 
+volatile bool displayNeedsClear = false;
+
 bool isMenuMode = false;
 
 enum MenuMode {
-  Hour,
-  Minute,
-  Day,
-  Month,
-  Year,
-  Style
+    Hour,
+    Minute,
+    Day,
+    Month,
+    Year,
+    Style
 };
 MenuMode menuMode = Hour;
 
 enum DisplayMode {
-  Normal,
-  Text
+    Normal,
+    Text
 };
 DisplayMode displayMode = Normal;
 bool clock24 = false;
@@ -52,63 +54,63 @@ static const int SELECT_BOX_STROKE = 2;
 
 
 String numberToText(int n, bool ordinal) {
-  if (n > 100) {
-    String s = numberToText(n / 100, false);
-    s.concat(' ');
-    return s + numberToText(n % 100, ordinal);
-  }
-  switch (n) {
-    case 1:
-      return ordinal ? "first" : "one";
-    case 2:
-      return ordinal ? "second" : "two";
-    case 3:
-      return ordinal ? "third" : "three";
-    case 4:
-      return ordinal ? "fourth" : "four";
-    case 5:
-      return ordinal ? "fifth" : "five";
-    case 6:
-      return ordinal ? "sixth" : "six";
-    case 7:
-      return ordinal ? "seventh" : "seven";
-    case 8:
-      return ordinal ? "eighth" : "eight";
-    case 9:
-      return ordinal ? "ninth" : "nine";
-    case 10:
-      return ordinal ? "tenth" : "ten";
-    case 11:
-      return ordinal ? "eleventh" : "eleven";
-    case 12:
-      return ordinal ? "twelfth" : "twelve";
-    case 13:
-      return ordinal ? "thirteenth" : "thirteen";
-    case 15:
-      return ordinal ? "fifteenth" : "fifteen";
-    default:
-      if (n < 20) {
-        String s = numberToText(n - 10, false);
-        s.concat("teen");
-        if (ordinal) {
-          s.concat("th");
-        }
-        return s;
-      } else if (n == 20) {
-        return ordinal ? "twentieth" : "twenty";
-      } else if (n == 30) {
-        return ordinal ? "thirtieth" : "thirty";
-      } else if (n == 40) {
-        return ordinal ? "fortieth" : "forty";
-      } else if (n == 50) {
-        return ordinal ? "fiftieth" : "fifty";
-      } else {
-        String s = numberToText(n / 10 * 10, false);
+    if (n > 100) {
+        String s = numberToText(n / 100, false);
         s.concat(' ');
-        return s + numberToText(n % 10, ordinal);
-      }
-      break;
-  }
+        return s + numberToText(n % 100, ordinal);
+    }
+    switch (n) {
+        case 1:
+            return ordinal ? "first" : "one";
+        case 2:
+            return ordinal ? "second" : "two";
+        case 3:
+            return ordinal ? "third" : "three";
+        case 4:
+            return ordinal ? "fourth" : "four";
+        case 5:
+            return ordinal ? "fifth" : "five";
+        case 6:
+            return ordinal ? "sixth" : "six";
+        case 7:
+            return ordinal ? "seventh" : "seven";
+        case 8:
+            return ordinal ? "eighth" : "eight";
+        case 9:
+            return ordinal ? "ninth" : "nine";
+        case 10:
+            return ordinal ? "tenth" : "ten";
+        case 11:
+            return ordinal ? "eleventh" : "eleven";
+        case 12:
+            return ordinal ? "twelfth" : "twelve";
+        case 13:
+            return ordinal ? "thirteenth" : "thirteen";
+        case 15:
+            return ordinal ? "fifteenth" : "fifteen";
+        default:
+            if (n < 20) {
+                String s = numberToText(n - 10, false);
+                s.concat("teen");
+                if (ordinal) {
+                    s.concat("th");
+                }
+                return s;
+            } else if (n == 20) {
+                return ordinal ? "twentieth" : "twenty";
+            } else if (n == 30) {
+                return ordinal ? "thirtieth" : "thirty";
+            } else if (n == 40) {
+                return ordinal ? "fortieth" : "forty";
+            } else if (n == 50) {
+                return ordinal ? "fiftieth" : "fifty";
+            } else {
+                String s = numberToText(n / 10 * 10, false);
+                s.concat(' ');
+                return s + numberToText(n % 10, ordinal);
+            }
+            break;
+    }
 }
 
 void printField(char* value, bool selected) {
@@ -117,268 +119,286 @@ void printField(char* value, bool selected) {
     int16_t rect_x, rect_y;
     uint16_t rect_w, rect_h;
     display.getTextBounds(value, x, y, &rect_x, &rect_y, &rect_w, &rect_h);
-  
+
     if (selected) {
-        display.fillRect(rect_x - SELECT_BOX_STROKE, rect_y - SELECT_BOX_STROKE, rect_w + 2 * SELECT_BOX_STROKE, rect_h + 2 * SELECT_BOX_STROKE, BLACK);
+        display.fillRect(
+                rect_x - SELECT_BOX_STROKE, 
+                rect_y - SELECT_BOX_STROKE, 
+                rect_w + 2 * SELECT_BOX_STROKE, 
+                rect_h + 2 * SELECT_BOX_STROKE, 
+                BLACK
+            );
         display.fillRect(rect_x , rect_y, rect_w , rect_h, WHITE);
     } else {
-        display.fillRect(rect_x - SELECT_BOX_STROKE, rect_y - SELECT_BOX_STROKE, rect_w + 2 * SELECT_BOX_STROKE, rect_h + 2 * SELECT_BOX_STROKE, WHITE);
+        display.fillRect(
+                rect_x - SELECT_BOX_STROKE, 
+                rect_y - SELECT_BOX_STROKE, 
+                rect_w + 2 * SELECT_BOX_STROKE, 
+                rect_h + 2 * SELECT_BOX_STROKE, 
+                WHITE
+            );
     }
 
-  display.print(value);
+    display.print(value);
 }
 
 void menuButtonISR() {
-  menuDownStart = millis();
-  isMenuHolding = true;
+    menuDownStart = millis();
+    isMenuHolding = true;
 
-  if (isMenuMode) {
-    switch (menuMode) {
-      case Hour:
-        menuMode = Minute; break;
-      case Minute:
-        menuMode = Day; break;
-      case Day:
-        menuMode = Month; break;
-      case Month:
-        menuMode = Year; break;
-      case Year:
-        menuMode = Style; break;
-      case Style:
-        menuMode = Hour; break;
+    if (isMenuMode) {
+        displayNeedsClear = true;
+        switch (menuMode) {
+            case Hour:
+                menuMode = Minute; break;
+            case Minute:
+                menuMode = Day; break;
+            case Day:
+                menuMode = Month; break;
+            case Month:
+                menuMode = Year; break;
+            case Year:
+                menuMode = Style; break;
+            case Style:
+                menuMode = Hour; break;
+        }
     }
-  }
 }
 
 void calendarButtonISR() {
-  showingCalendar = !showingCalendar;
-  showCalendarStart = millis();
+    showingCalendar = !showingCalendar;
+    showCalendarStart = millis();
+    displayNeedsClear = true;
 }
 
 void selectButtonISR() {
-  if (isMenuMode) {
-    time_t t = now();
-    int new_hour = hour(t);
-    int new_minute = minute(t);
-    int new_year = year(t);
-    int new_month = month(t);
-    int new_day = day(t);
-    switch (menuMode) {
-      case Hour:
-        new_hour = (new_hour + 1) % 24;
-        break;
-      case Minute:
-        new_minute = (new_minute + 1) % 60;
-        break;
-      case Day:
-        new_day = (new_day + 1) % monthDays[new_month - 1];
-        break;
-      case Month:
-        new_month = (new_month + 1) % 12;
-        break;
-      case Year:
-        new_year += 1;
-        break;
-      case Style:
-        switch (displayMode) {
-          case Normal:
-            if (clock24) {
-              displayMode = Text;
-              clock24 = false;
-            } else {
-              clock24 = true;
-            }
-            break;
-          case Text:
-            if (clock24) {
-              displayMode = Normal;
-              clock24 = false;
-            } else {
-              clock24 = true;
-            }
-            break;
+    if (isMenuMode) {
+        time_t t = now();
+        int new_hour = hour(t);
+        int new_minute = minute(t);
+        int new_year = year(t);
+        int new_month = month(t);
+        int new_day = day(t);
+        switch (menuMode) {
+            case Hour:
+                new_hour = (new_hour + 1) % 24;
+                break;
+            case Minute:
+                new_minute = (new_minute + 1) % 60;
+                break;
+            case Day:
+                new_day = (new_day + 1) % monthDays[new_month - 1];
+                break;
+            case Month:
+                new_month = (new_month + 1) % 12;
+                break;
+            case Year:
+                new_year += 1;
+                break;
+            case Style:
+                switch (displayMode) {
+                    case Normal:
+                        if (clock24) {
+                            displayMode = Text;
+                            clock24 = false;
+                        } else {
+                            clock24 = true;
+                        }
+                        break;
+                    case Text:
+                        if (clock24) {
+                            displayMode = Normal;
+                            clock24 = false;
+                        } else {
+                            clock24 = true;
+                        }
+                        break;
+                }
+                break;
         }
-        break;
+        setTime(new_hour, new_minute, 0, new_day, new_month, new_year);
     }
-    setTime(new_hour, new_minute, 0, new_day, new_month, new_year);
-  }
 }
 
 void setup() {
-  pinMode(calendarButtonPin, OUTPUT);
-  pinMode(selectButtonPin, OUTPUT);
-  pinMode(menuButtonPin, OUTPUT);
+    pinMode(calendarButtonPin, OUTPUT);
+    pinMode(selectButtonPin, OUTPUT);
+    pinMode(menuButtonPin, OUTPUT);
 
-  attachInterrupt(digitalPinToInterrupt(calendarButtonPin), calendarButtonISR, RISING);
-  attachInterrupt(digitalPinToInterrupt(selectButtonPin), selectButtonISR, RISING);
-  attachInterrupt(digitalPinToInterrupt(menuButtonPin), menuButtonISR, RISING);
+    attachInterrupt(digitalPinToInterrupt(calendarButtonPin), calendarButtonISR, RISING);
+    attachInterrupt(digitalPinToInterrupt(selectButtonPin), selectButtonISR, RISING);
+    attachInterrupt(digitalPinToInterrupt(menuButtonPin), menuButtonISR, RISING);
 
-  // Set initial time to something reasonable
-  setTime(0, 0, 0, 1, 7, 2019);
+    // Set initial time to something reasonable
+    setTime(0, 0, 0, 1, 7, 2019);
 
-  display.begin();
-  display.clearDisplay();
-  display.cp437(true); // use the right character codes
-  display.setFont(&FreeSerif12pt7b);
-  display.setRotation(1);
+    display.begin();
+    display.clearDisplay();
+    display.cp437(true); // use the right character codes
+    display.setFont(&FreeSerif12pt7b);
+    display.setRotation(1);
 }
 
 void loop() {
-  if (isMenuHolding) {
-    if (digitalRead(menuButtonPin) == LOW) {
-      isMenuHolding = false;
-    } else if (millis() - menuDownStart > MENU_HOLD_DELAY) {
-      isMenuHolding = false;
-      isMenuMode = !isMenuMode;
+    if (isMenuHolding) {
+        if (digitalRead(menuButtonPin) == LOW) {
+            isMenuHolding = false;
+        } else if (millis() - menuDownStart > MENU_HOLD_DELAY) {
+            isMenuHolding = false;
+            isMenuMode = !isMenuMode;
+            displayNeedsClear = true;
+        }
     }
-  }
 
-  int delayDuration;
-  if (isMenuMode) {
-    delayDuration = 100;
-  } else {
-    delayDuration = 500;
-  }
-
-  if (showingCalendar && millis() - showCalendarStart > SHOW_DATE_DELAY) {
-    showingCalendar = false;
-  }
-
-  display.fillRect(0, 31, display.width(), display.height() - 31, WHITE);
-  display.setTextColor(BLACK);
-
-  bool showCalendar;
-  if (isMenuMode) {
-    showCalendar = (menuMode == Day || menuMode == Month || menuMode == Year);
-  } else {
-    showCalendar = showingCalendar;
-  }
-
-  time_t t = now();
-  char buffer[50];
-  if (isMenuMode && menuMode == Style) {
-    display.setTextSize(3);
-    display.setCursor(0, 100);
-    display.clearDisplay();
-    switch (displayMode) {
-      case Normal:
-        if (clock24) {
-          display.print("24 hour digital");
-        } else {
-          display.print("12 hour digital");
-        }
-        break;
-      case Text:
-        if (clock24) {
-          display.print("24 hour text");
-        } else {
-          display.print("12 hour text");
-        }
-        break;
-      }
-  } else if (showCalendar) {
-    switch (displayMode) {
-      case Text:
-        if (!menuMode) {
-          display.setTextSize(2);
-          display.setCursor(5, 20);
-  
-          String s = String(dayStr(weekday(t)));
-          s.concat(", ");
-  
-          s.concat(monthStr(month(t)));
-          s.concat(' ');
-          
-          s.concat(numberToText(day(t), true));
-          s.concat(", ");
-
-          s.concat(numberToText(year(t), false));
-
-          display.clearDisplay();
-          display.print(s);
-          break;
-        }
-      case Normal:
-        display.setTextSize(2);
-        display.setCursor(0, 70);
-
-        // TODO center?
-        sprintf(buffer, "%s,", dayStr(weekday(t)));
-        printField(buffer, false);
-
-        display.setCursor(0, 90);
-        printField(monthStr(month(t)), isMenuMode && menuMode == Month);
-
-        sprintf(buffer, ":");
-        printField(buffer, false);
-
-        sprintf(buffer, "%d,", day(t));
-        printField(buffer, isMenuMode && menuMode == Day);
-
-        display.setCursor(20, 110);
-        sprintf(buffer, "%d", year(t));
-        printField(buffer, isMenuMode && menuMode == Year);
-        break;
+    int delayDuration;
+    if (isMenuMode) {
+        delayDuration = 100;
+    } else {
+        delayDuration = 500;
     }
-  } else {
-    switch (displayMode) {
-      case Text:
-        if (!menuMode) {
-          display.setTextSize(2);
-          display.setCursor(5, 20);
 
-          int hours = clock24 ? hour(t) : hourFormat12(t);
-          int minutes = minute(t);
-          String s = numberToText(hours, false);
-          s.concat(' ');
-          if (minutes < 10) {
-            s.concat("oh ");
-          }
-          s += numberToText(minutes, false);
-          if (!clock24) {
-            if (isAM(t)) {
-              s.concat(" in the morning");
-            } else if (hours == 12 || hours < 5) {
-              s.concat(" in the afternoon");
-            } else if (hours < 10) {
-              s.concat(" in the evening");
-            } else {
-              s.concat(" at night");
-            }
-          }
-          display.print(s);
-        }
-      case Normal:
-        display.setTextSize(2);
+    if (showingCalendar && millis() - showCalendarStart > SHOW_DATE_DELAY) {
+        showingCalendar = false;
+    }
+
+    if (displayNeedsClear) {
+        displayNeedsClear = false;
+        display.clearDisplay();
+    }
+    display.setTextColor(BLACK);
+
+    bool showCalendar;
+    if (isMenuMode) {
+        showCalendar = (menuMode == Day || menuMode == Month || menuMode == Year);
+    } else {
+        showCalendar = showingCalendar;
+    }
+
+    time_t t = now();
+    char buffer[50];
+    if (isMenuMode && menuMode == Style) {
+        display.setTextSize(3);
         display.setCursor(0, 100);
-
-        if (clock24) {
-          sprintf(buffer, "%02d", hour(t));
-        } else {
-          sprintf(buffer, "%2d", hourFormat12(t));
+        display.clearDisplay();
+        switch (displayMode) {
+            case Normal:
+                if (clock24) {
+                    display.print("24 hour digital");
+                } else {
+                    display.print("12 hour digital");
+                }
+                break;
+            case Text:
+                if (clock24) {
+                    display.print("24 hour text");
+                } else {
+                    display.print("12 hour text");
+                }
+                break;
         }
-        printField(buffer, isMenuMode && menuMode == Hour);
+    } else if (showCalendar) {
+        switch (displayMode) {
+            case Text:
+                if (!menuMode) {
+                    display.setTextSize(2);
+                    display.setCursor(5, 20);
 
-        sprintf(buffer, ":");
-        printField(buffer, false);
+                    String s = String(dayStr(weekday(t)));
+                    s.concat(", ");
 
-        sprintf(buffer, "%02d", minute(t));
-        printField(buffer, isMenuMode && menuMode == Minute);
+                    s.concat(monthStr(month(t)));
+                    s.concat(' ');
 
-        display.setTextSize(1);
-        sprintf(buffer, ":%d\n", second(t));
-        printField(buffer, false);
+                    s.concat(numberToText(day(t), true));
+                    s.concat(", ");
 
-        if (!clock24) {
-            display.setCursor(100, 85);
-            sprintf(buffer, "%s", isAM(t) ? "AM" : "PM");
-            printField(buffer, isMenuMode && menuMode == Hour);
+                    s.concat(numberToText(year(t), false));
+
+                    display.clearDisplay();
+                    display.print(s);
+                    break;
+                }
+            case Normal:
+                display.setTextSize(2);
+                display.setCursor(0, 70);
+
+                // TODO center?
+                sprintf(buffer, "%s,", dayStr(weekday(t)));
+                printField(buffer, false);
+
+                display.setCursor(0, 90);
+                printField(monthStr(month(t)), isMenuMode && menuMode == Month);
+
+                sprintf(buffer, ":");
+                printField(buffer, false);
+
+                sprintf(buffer, "%d,", day(t));
+                printField(buffer, isMenuMode && menuMode == Day);
+
+                display.setCursor(20, 110);
+                sprintf(buffer, "%d", year(t));
+                printField(buffer, isMenuMode && menuMode == Year);
+                break;
         }
-        break;
+    } else {
+        switch (displayMode) {
+            case Text:
+                if (!menuMode) {
+                    display.setTextSize(2);
+                    display.setCursor(5, 20);
+
+                    int hours = clock24 ? hour(t) : hourFormat12(t);
+                    int minutes = minute(t);
+                    String s = numberToText(hours, false);
+                    s.concat(' ');
+                    if (minutes < 10) {
+                        s.concat("oh ");
+                    }
+                    s += numberToText(minutes, false);
+                    if (!clock24) {
+                        if (isAM(t)) {
+                            s.concat(" in the morning");
+                        } else if (hours == 12 || hours < 5) {
+                            s.concat(" in the afternoon");
+                        } else if (hours < 10) {
+                            s.concat(" in the evening");
+                        } else {
+                            s.concat(" at night");
+                        }
+                    }
+                    display.print(s);
+                }
+            case Normal:
+                display.setTextSize(2);
+                display.setCursor(0, 100);
+
+                if (clock24) {
+                    sprintf(buffer, "%02d", hour(t));
+                } else {
+                    sprintf(buffer, "%2d", hourFormat12(t));
+                }
+                printField(buffer, isMenuMode && menuMode == Hour);
+
+                sprintf(buffer, ":");
+                printField(buffer, false);
+
+                sprintf(buffer, "%02d", minute(t));
+                printField(buffer, isMenuMode && menuMode == Minute);
+
+                display.setTextSize(1);
+                sprintf(buffer, ":%d\n", second(t));
+                printField(buffer, false);
+
+                if (!clock24) {
+                    display.setCursor(100, 85);
+                    sprintf(buffer, "%s", isAM(t) ? "AM" : "PM");
+                    printField(buffer, isMenuMode && menuMode == Hour);
+                }
+                break;
+        }
     }
-  }
 
-  display.refresh();
-  delay(delayDuration);
+    display.refresh();
+    delay(delayDuration);
 }
 
