@@ -1,4 +1,6 @@
-# Fix this to by itsy bitsy M0
+# Uses https://github.com/sudar/Arduino-Makefile. Make sure it's installed
+
+# Fix this to be itsy bitsy M0
 BOARD_TAG ?= uno
 
 ARDUINO_DIR ?= "/home/arlo/code/arduino-1.8.8"
