@@ -113,23 +113,34 @@ String numberToText(int n, bool ordinal) {
     }
 }
 
-void printField(char* value, bool selected) {
-    uint16_t x = display.getCursorX();
-    uint16_t y = display.getCursorY();
+enum TextAlign {
+    Left, Right, Center
+};
+
+void printField(int x, int y, int width, int height, TextAlign textAlign, char* value, bool selected) {
+    int inner_x = x + 2 * SELECT_BOX_STROKE;
+    int inner_y = y + 2 * SELECT_BOX_STROKE;
+    int inner_width = width - 4 * SELECT_BOX_STROKE;
+    int inner_height = height - 4 * SELECT_BOX_STROKE;
+    display.fillRect(x, y, width, height, WHITE);
+    
     int16_t rect_x, rect_y;
     uint16_t rect_w, rect_h;
-    display.getTextBounds(value, x, y, &rect_x, &rect_y, &rect_w, &rect_h);
+    display.getTextBounds(value, inner_x, inner_y + inner_height, &rect_x, &rect_y, &rect_w, &rect_h);
+    if (textAlign == Right) {
+        rect_x += inner_width - rect_w; 
+    } else if (textAlign == Center) {
+        rect_x += (inner_width - rect_w) / 2;
+    }
 
     if (selected) {
         display.fillRect(
-                rect_x - SELECT_BOX_STROKE, 
-                rect_y - SELECT_BOX_STROKE, 
-                rect_w + 2 * SELECT_BOX_STROKE, 
-                rect_h + 2 * SELECT_BOX_STROKE, 
+                rect_x - 2 * SELECT_BOX_STROKE, 
+                rect_y - 2 *SELECT_BOX_STROKE, 
+                rect_w + 4 * SELECT_BOX_STROKE, 
+                rect_h + 4 * SELECT_BOX_STROKE, 
                 BLACK
             );
-        display.fillRect(rect_x , rect_y, rect_w , rect_h, WHITE);
-    } else {
         display.fillRect(
                 rect_x - SELECT_BOX_STROKE, 
                 rect_y - SELECT_BOX_STROKE, 
@@ -137,8 +148,17 @@ void printField(char* value, bool selected) {
                 rect_h + 2 * SELECT_BOX_STROKE, 
                 WHITE
             );
+    } else {
+        display.fillRect(
+                rect_x - 2 * SELECT_BOX_STROKE, 
+                rect_y - 2 *SELECT_BOX_STROKE, 
+                rect_w + 4 * SELECT_BOX_STROKE, 
+                rect_h + 4 * SELECT_BOX_STROKE, 
+                WHITE
+            );
     }
 
+    display.setCursor(rect_x, rect_y);
     display.print(value);
 }
 
@@ -254,7 +274,7 @@ void loop() {
     if (isMenuMode) {
         delayDuration = 100;
     } else {
-        delayDuration = 500;
+        delayDuration = 1000;
     }
 
     if (showingCalendar && millis() - showCalendarStart > SHOW_DATE_DELAY) {
@@ -277,8 +297,8 @@ void loop() {
     time_t t = now();
     char buffer[50];
     if (isMenuMode && menuMode == Style) {
-        display.setTextSize(3);
-        display.setCursor(0, 100);
+        display.setTextSize(2);
+        display.setCursor(0, 50);
         display.clearDisplay();
         switch (displayMode) {
             case Normal:
@@ -299,100 +319,94 @@ void loop() {
     } else if (showCalendar) {
         switch (displayMode) {
             case Text:
-                if (!menuMode) {
-                    display.setTextSize(2);
-                    display.setCursor(5, 20);
+                // TODO re-write
+                display.setTextSize(2);
+                display.setCursor(5, 20);
 
-                    String s = String(dayStr(weekday(t)));
-                    s.concat(", ");
+                String s = String(dayStr(weekday(t)));
+                s.concat(", ");
 
-                    s.concat(monthStr(month(t)));
-                    s.concat(' ');
+                s.concat(monthStr(month(t)));
+                s.concat(' ');
 
-                    s.concat(numberToText(day(t), true));
-                    s.concat(", ");
+                s.concat(numberToText(day(t), true));
+                s.concat(", ");
 
-                    s.concat(numberToText(year(t), false));
+                s.concat(numberToText(year(t), false));
 
-                    display.clearDisplay();
-                    display.print(s);
-                    break;
-                }
+                display.clearDisplay();
+                display.print(s);
+                break;
             case Normal:
                 display.setTextSize(2);
-                display.setCursor(0, 70);
 
-                // TODO center?
                 sprintf(buffer, "%s,", dayStr(weekday(t)));
-                printField(buffer, false);
+                printField(0, 10, 168, 30, Center, buffer, false);
 
-                display.setCursor(0, 90);
-                printField(monthStr(month(t)), isMenuMode && menuMode == Month);
+                printField(0, 50, 100, 30, Right, monthStr(month(t)), isMenuMode && menuMode == Month);
 
-                sprintf(buffer, ":");
-                printField(buffer, false);
+                sprintf(buffer, " ");
+                printField(100, 50, 10, 30, Left, buffer, false);
 
                 sprintf(buffer, "%d,", day(t));
-                printField(buffer, isMenuMode && menuMode == Day);
+                printField(110, 50, 50, 30, Left, buffer, isMenuMode && menuMode == Day);
 
-                display.setCursor(20, 110);
                 sprintf(buffer, "%d", year(t));
-                printField(buffer, isMenuMode && menuMode == Year);
+                printField(0, 100, 160, 30, Center, buffer, isMenuMode && menuMode == Year);
                 break;
         }
     } else {
         switch (displayMode) {
             case Text:
-                if (!menuMode) {
-                    display.setTextSize(2);
-                    display.setCursor(5, 20);
+                // TODO re-write
+                display.setTextSize(2);
+                display.setCursor(5, 20);
 
-                    int hours = clock24 ? hour(t) : hourFormat12(t);
-                    int minutes = minute(t);
-                    String s = numberToText(hours, false);
-                    s.concat(' ');
-                    if (minutes < 10) {
-                        s.concat("oh ");
-                    }
-                    s += numberToText(minutes, false);
-                    if (!clock24) {
-                        if (isAM(t)) {
-                            s.concat(" in the morning");
-                        } else if (hours == 12 || hours < 5) {
-                            s.concat(" in the afternoon");
-                        } else if (hours < 10) {
-                            s.concat(" in the evening");
-                        } else {
-                            s.concat(" at night");
-                        }
-                    }
-                    display.print(s);
+                int hours = clock24 ? hour(t) : hourFormat12(t);
+                int minutes = minute(t);
+                String s = numberToText(hours, false);
+                s.concat(' ');
+                if (minutes < 10) {
+                    s.concat("oh ");
                 }
+                s += numberToText(minutes, false);
+                if (!clock24) {
+                    if (isAM(t)) {
+                        s.concat(" in the morning");
+                    } else if (hours == 12 || hours < 5) {
+                        s.concat(" in the afternoon");
+                    } else if (hours < 10) {
+                        s.concat(" in the evening");
+                    } else {
+                        s.concat(" at night");
+                    }
+                }
+                display.print(s);
             case Normal:
                 display.setTextSize(2);
-                display.setCursor(0, 100);
 
                 if (clock24) {
                     sprintf(buffer, "%02d", hour(t));
                 } else {
                     sprintf(buffer, "%2d", hourFormat12(t));
                 }
-                printField(buffer, isMenuMode && menuMode == Hour);
+                printField(0, 70, 50, 30, Right, buffer, isMenuMode && menuMode == Hour);
 
                 sprintf(buffer, ":");
                 printField(buffer, false);
+                printField(50, 70, 5, 30, Center, buffer, isMenuMode && menuMode == Hour);
 
                 sprintf(buffer, "%02d", minute(t));
-                printField(buffer, isMenuMode && menuMode == Minute);
+                printField(55, 70, 50, 30, Left, buffer, isMenuMode && menuMode == Minute);
 
-                display.setTextSize(1);
-                sprintf(buffer, ":%d\n", second(t));
-                printField(buffer, false);
+                //display.setTextSize(1);
+                //sprintf(buffer, ":%d\n", second(t));
+                //printField(buffer, false);
 
                 if (!clock24) {
-                    display.setCursor(100, 85);
+                    display.setTextSize(1);
                     sprintf(buffer, "%s", isAM(t) ? "AM" : "PM");
-                    printField(buffer, isMenuMode && menuMode == Hour);
+                    printField(105, 80, 30, 20, buffer, isMenuMode && menuMode == Hour);
                 }
                 break;
         }
