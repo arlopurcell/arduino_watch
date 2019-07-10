@@ -8,7 +8,7 @@ ARDUINO_LIB_PATH ?= "/home/arlo/Arduino/libraries"
 ARDMK_DIR ?= "/usr/share/arduino"
 AVR_TOOLS_DIR ?= "/home/arlo/code/arduino-1.8.8/hardware/tools/avr"
 
-ARDUINO_LIBS = Adafruit_GFX_Library Adafruit_SHARP_Memory_Display Time
+ARDUINO_LIBS = Adafruit_GFX_Library Adafruit_SHARP_Memory_Display RTClib
 
 include $(ARDMK_DIR)/Arduino.mk
 

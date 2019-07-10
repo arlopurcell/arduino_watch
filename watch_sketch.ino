@@ -2,7 +2,8 @@
 #include <Adafruit_SharpMem.h>
 #include <Fonts/FreeSerif12pt7b.h>
 
-#include <Time.h>
+//#include <Time.h>
+#include<RTClib.h>
 
 // any pins can be used
 #define SHARP_SCK  13
@@ -10,6 +11,7 @@
 #define SHARP_SS   10
 
 Adafruit_SharpMem display(SHARP_SCK, SHARP_MOSI, SHARP_SS, 144, 168);
+RTC_PCF8523 rtc;
 
 #define BLACK 0
 #define WHITE 1
@@ -31,25 +33,43 @@ volatile bool displayNeedsClear = false;
 
 bool isMenuMode = false;
 
-enum MenuMode {
+typedef enum {
     Hour,
     Minute,
     Day,
     Month,
     Year,
     Style
-};
+} MenuMode;
 MenuMode menuMode = Hour;
 
-enum DisplayMode {
+typedef enum {
     Normal,
     Text
-};
+} DisplayMode;
 DisplayMode displayMode = Normal;
 bool clock24 = false;
 
+typedef enum {
+    Left, Right, Center
+} TextAlign;
 
 static const uint8_t monthDays[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}; // API starts months from 1, this array starts from 0
+static const char weekdayStrings[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+static const char monthStrings[12][12] = {
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "Septemper",
+    "October",
+    "November",
+    "December"
+};
 static const int SELECT_BOX_STROKE = 2;
 
 
@@ -113,11 +133,7 @@ String numberToText(int n, bool ordinal) {
     }
 }
 
-enum TextAlign {
-    Left, Right, Center
-};
-
-void printField(int x, int y, int width, int height, TextAlign textAlign, char* value, bool selected) {
+void printField(int x, int y, int width, int height, TextAlign textAlign, const char* value, bool selected) {
     int inner_x = x + 2 * SELECT_BOX_STROKE;
     int inner_y = y + 2 * SELECT_BOX_STROKE;
     int inner_width = width - 4 * SELECT_BOX_STROKE;
@@ -186,34 +202,44 @@ void menuButtonISR() {
 }
 
 void calendarButtonISR() {
-    showingCalendar = !showingCalendar;
-    showCalendarStart = millis();
+    if (showingCalendar) {
+        showingCalendar = false;
+    } else {
+        showingCalendar = true;
+        showCalendarStart = millis();
+    }
     displayNeedsClear = true;
 }
 
 void selectButtonISR() {
     if (isMenuMode) {
-        time_t t = now();
-        int new_hour = hour(t);
-        int new_minute = minute(t);
-        int new_year = year(t);
-        int new_month = month(t);
-        int new_day = day(t);
+        DateTime now = rtc.now();
+        int new_hour = now.hour();
+        int new_minute = now.minute();
+        int new_year = now.year();
+        int new_month = now.month();
+        int new_day = now.day();
+        boolean updateTime = false;
         switch (menuMode) {
             case Hour:
                 new_hour = (new_hour + 1) % 24;
+                updateTime = true;
                 break;
             case Minute:
                 new_minute = (new_minute + 1) % 60;
+                updateTime = true;
                 break;
             case Day:
                 new_day = (new_day + 1) % monthDays[new_month - 1];
+                updateTime = true;
                 break;
             case Month:
                 new_month = (new_month + 1) % 12;
+                updateTime = true;
                 break;
             case Year:
                 new_year += 1;
+                updateTime = true;
                 break;
             case Style:
                 switch (displayMode) {
@@ -236,7 +262,9 @@ void selectButtonISR() {
                 }
                 break;
         }
-        setTime(new_hour, new_minute, 0, new_day, new_month, new_year);
+        if (updateTime) {
+            rtc.adjust(DateTime(new_year, new_month, new_day, new_hour, new_minute, 0));
+        }
     }
 }
 
@@ -249,14 +277,23 @@ void setup() {
     attachInterrupt(digitalPinToInterrupt(selectButtonPin), selectButtonISR, RISING);
     attachInterrupt(digitalPinToInterrupt(menuButtonPin), menuButtonISR, RISING);
 
-    // Set initial time to something reasonable
-    setTime(0, 0, 0, 1, 7, 2019);
-
     display.begin();
     display.clearDisplay();
     display.cp437(true); // use the right character codes
     display.setFont(&FreeSerif12pt7b);
     display.setRotation(1);
+
+    if (!rtc.begin()) {
+        Serial.println("Couldn't find RTC");
+        while(1);
+    }
+
+    if (!rtc.initialized()) {
+        Serial.println("RTC is NOT running!");
+    }
+
+    // set the RTC to the date & time this sketch was compiled
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
 }
 
 void loop() {
@@ -294,7 +331,7 @@ void loop() {
         showCalendar = showingCalendar;
     }
 
-    time_t t = now();
+    DateTime now = rtc.now();
     char buffer[50];
     if (isMenuMode && menuMode == Style) {
         display.setTextSize(2);
@@ -319,94 +356,115 @@ void loop() {
     } else if (showCalendar) {
         switch (displayMode) {
             case Text:
-                // TODO re-write
-                display.setTextSize(2);
-                display.setCursor(5, 20);
-
-                String s = String(dayStr(weekday(t)));
-                s.concat(", ");
-
-                s.concat(monthStr(month(t)));
-                s.concat(' ');
-
-                s.concat(numberToText(day(t), true));
-                s.concat(", ");
-
-                s.concat(numberToText(year(t), false));
-
-                display.clearDisplay();
-                display.print(s);
+                {
+                    // TODO re-write to be line by line
+                    display.setTextSize(2);
+                    display.setCursor(5, 20);
+    
+                    String s = String(weekdayStrings[now.dayOfTheWeek()]);
+                    s.concat(", ");
+    
+                    s.concat(monthStrings[now.month()]);
+                    s.concat(' ');
+    
+                    s.concat(numberToText(now.day(), true));
+                    s.concat(", ");
+    
+                    s.concat(numberToText(now.year(), false));
+    
+                    display.clearDisplay();
+                    display.print(s);
+                }
                 break;
             case Normal:
-                display.setTextSize(2);
-
-                sprintf(buffer, "%s,", dayStr(weekday(t)));
-                printField(0, 10, 168, 30, Center, buffer, false);
-
-                printField(0, 50, 100, 30, Right, monthStr(month(t)), isMenuMode && menuMode == Month);
-
-                sprintf(buffer, " ");
-                printField(100, 50, 10, 30, Left, buffer, false);
-
-                sprintf(buffer, "%d,", day(t));
-                printField(110, 50, 50, 30, Left, buffer, isMenuMode && menuMode == Day);
-
-                sprintf(buffer, "%d", year(t));
-                printField(0, 100, 160, 30, Center, buffer, isMenuMode && menuMode == Year);
+                {
+                    display.setTextSize(2);
+    
+                    sprintf(buffer, "%s,", weekdayStrings[now.dayOfTheWeek()]);
+                    printField(0, 10, 168, 30, Center, buffer, false);
+    
+                    printField(0, 50, 100, 30, Right, monthStrings[now.month()], isMenuMode && menuMode == Month);
+    
+                    sprintf(buffer, " ");
+                    printField(100, 50, 10, 30, Left, buffer, false);
+    
+                    sprintf(buffer, "%d,", now.day());
+                    printField(110, 50, 50, 30, Left, buffer, isMenuMode && menuMode == Day);
+    
+                    sprintf(buffer, "%d", now.year());
+                    printField(0, 100, 160, 30, Center, buffer, isMenuMode && menuMode == Year);
+                }
                 break;
         }
     } else {
         switch (displayMode) {
             case Text:
-                // TODO re-write
-                display.setTextSize(2);
-                display.setCursor(5, 20);
-
-                int hours = clock24 ? hour(t) : hourFormat12(t);
-                int minutes = minute(t);
-                String s = numberToText(hours, false);
-                s.concat(' ');
-                if (minutes < 10) {
-                    s.concat("oh ");
-                }
-                s += numberToText(minutes, false);
-                if (!clock24) {
-                    if (isAM(t)) {
-                        s.concat(" in the morning");
-                    } else if (hours == 12 || hours < 5) {
-                        s.concat(" in the afternoon");
-                    } else if (hours < 10) {
-                        s.concat(" in the evening");
-                    } else {
-                        s.concat(" at night");
+                {
+                    // TODO re-write to be line by line
+                    display.setTextSize(2);
+                    display.setCursor(5, 20);
+    
+                    int hours = now.hour();
+                    bool am = hours < 12;
+                    if (!clock24) {
+                        hours = hours / 12;
+                        if (hours == 0) {
+                            hours = 12;
+                        }
                     }
+                    int minutes = now.minute();
+                    String s = numberToText(hours, false);
+                    s.concat(' ');
+                    if (minutes < 10) {
+                        s.concat("oh ");
+                    }
+                    s += numberToText(minutes, false);
+                    if (!clock24) {
+                        if (am) {
+                            s.concat(" in the morning");
+                        } else if (hours == 12 || hours < 5) {
+                            s.concat(" in the afternoon");
+                        } else if (hours < 10) {
+                            s.concat(" in the evening");
+                        } else {
+                            s.concat(" at night");
+                        }
+                    }
+                    display.print(s);
                 }
-                display.print(s);
+                break;
             case Normal:
-                display.setTextSize(2);
-
-                if (clock24) {
-                    sprintf(buffer, "%02d", hour(t));
-                } else {
-                    sprintf(buffer, "%2d", hourFormat12(t));
-                }
-                printField(0, 70, 50, 30, Right, buffer, isMenuMode && menuMode == Hour);
-
-                sprintf(buffer, ":");
-                printField(buffer, false);
-                printField(50, 70, 5, 30, Center, buffer, isMenuMode && menuMode == Hour);
-
-                sprintf(buffer, "%02d", minute(t));
-                printField(55, 70, 50, 30, Left, buffer, isMenuMode && menuMode == Minute);
-
-                //display.setTextSize(1);
-                //sprintf(buffer, ":%d\n", second(t));
-                //printField(buffer, false);
-
-                if (!clock24) {
-                    display.setTextSize(1);
-                    sprintf(buffer, "%s", isAM(t) ? "AM" : "PM");
-                    printField(105, 80, 30, 20, buffer, isMenuMode && menuMode == Hour);
+                {
+                    display.setTextSize(2);
+    
+                    int hours = now.hour();
+                    bool am = hours < 12;
+                    if (!clock24) {
+                        hours = hours / 12;
+                        if (hours == 0) {
+                            hours = 12;
+                        }
+                        sprintf(buffer, "%2d", hours);
+                    } else {
+                        sprintf(buffer, "%02d", hours);
+                    }
+                    printField(0, 70, 50, 30, Right, buffer, isMenuMode && menuMode == Hour);
+    
+                    sprintf(buffer, ":");
+                    printField(50, 70, 5, 30, Center, buffer, false);
+    
+                    sprintf(buffer, "%02d", now.minute());
+                    printField(55, 70, 50, 30, Left, buffer, isMenuMode && menuMode == Minute);
+    
+                    //display.setTextSize(1);
+                    //sprintf(buffer, ":%d\n", now.second());
+                    //printField(buffer, false);
+    
+                    if (!clock24) {
+                        display.setTextSize(1);
+                        sprintf(buffer, "%s", am ? "AM" : "PM");
+                        printField(105, 80, 30, 20, Left, buffer, isMenuMode && menuMode == Hour);
+                    }
                 }
                 break;
         }
@@ -415,4 +473,3 @@ void loop() {
     display.refresh();
     delay(delayDuration);
 }
-
