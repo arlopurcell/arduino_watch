@@ -16,13 +16,18 @@ RTC_PCF8523 rtc;
 #define BLACK 0
 #define WHITE 1
 
-const byte calendarButtonPin = 0;
+const byte calendarButtonPin = 2;
 const byte selectButtonPin = 1;
-const byte menuButtonPin = 2;
+const byte menuButtonPin = 0;
 
 const unsigned long MENU_HOLD_DELAY = 2000L;
 const unsigned long SHOW_DATE_DELAY = 10000L;
 
+volatile bool selectPushed;
+
+const long DEBOUNCE_MS = 200l;
+volatile unsigned long selectDownStart;
+volatile unsigned long calendarDownStart;
 volatile unsigned long menuDownStart;
 volatile bool isMenuHolding;
 
@@ -32,6 +37,9 @@ volatile bool showingCalendar = false;
 volatile bool displayNeedsClear = false;
 
 bool isMenuMode = false;
+
+volatile bool menuButtonDown = false;
+volatile bool selectButtonDown = false;
 
 typedef enum {
     Hour,
@@ -174,11 +182,14 @@ void printField(int x, int y, int width, int height, TextAlign textAlign, const 
             );
     }
 
-    display.setCursor(rect_x, rect_y);
+    display.setCursor(rect_x, rect_y + rect_h);
     display.print(value);
 }
 
 void menuButtonISR() {
+    if (millis() - menuDownStart < DEBOUNCE_MS) {
+        return;
+    }
     menuDownStart = millis();
     isMenuHolding = true;
 
@@ -202,6 +213,10 @@ void menuButtonISR() {
 }
 
 void calendarButtonISR() {
+    if (millis() - calendarDownStart < DEBOUNCE_MS) {
+        return;
+    }
+    calendarDownStart = millis();
     if (showingCalendar) {
         showingCalendar = false;
     } else {
@@ -212,76 +227,47 @@ void calendarButtonISR() {
 }
 
 void selectButtonISR() {
-    if (isMenuMode) {
-        DateTime now = rtc.now();
-        int new_hour = now.hour();
-        int new_minute = now.minute();
-        int new_year = now.year();
-        int new_month = now.month();
-        int new_day = now.day();
-        boolean updateTime = false;
-        switch (menuMode) {
-            case Hour:
-                new_hour = (new_hour + 1) % 24;
-                updateTime = true;
-                break;
-            case Minute:
-                new_minute = (new_minute + 1) % 60;
-                updateTime = true;
-                break;
-            case Day:
-                new_day = (new_day + 1) % monthDays[new_month - 1];
-                updateTime = true;
-                break;
-            case Month:
-                new_month = (new_month + 1) % 12;
-                updateTime = true;
-                break;
-            case Year:
-                new_year += 1;
-                updateTime = true;
-                break;
-            case Style:
-                switch (displayMode) {
-                    case Normal:
-                        if (clock24) {
-                            displayMode = Text;
-                            clock24 = false;
-                        } else {
-                            clock24 = true;
-                        }
-                        break;
-                    case Text:
-                        if (clock24) {
-                            displayMode = Normal;
-                            clock24 = false;
-                        } else {
-                            clock24 = true;
-                        }
-                        break;
-                }
-                break;
-        }
-        if (updateTime) {
-            rtc.adjust(DateTime(new_year, new_month, new_day, new_hour, new_minute, 0));
-        }
+    if (millis() - selectDownStart < DEBOUNCE_MS) {
+        return;
     }
+    selectDownStart = millis();
+
+    selectPushed = true;
+}
+
+void menuButtonChange() {
+  menuButtonDown = !menuButtonDown;
+}
+
+void selectButtonChange() {
+  selectButtonDown = !selectButtonDown;
 }
 
 void setup() {
-    pinMode(calendarButtonPin, OUTPUT);
-    pinMode(selectButtonPin, OUTPUT);
-    pinMode(menuButtonPin, OUTPUT);
+    
+    pinMode(calendarButtonPin, INPUT_PULLUP);
+    pinMode(selectButtonPin, INPUT_PULLUP);
+    pinMode(menuButtonPin, INPUT_PULLUP);
 
-    attachInterrupt(digitalPinToInterrupt(calendarButtonPin), calendarButtonISR, RISING);
-    attachInterrupt(digitalPinToInterrupt(selectButtonPin), selectButtonISR, RISING);
-    attachInterrupt(digitalPinToInterrupt(menuButtonPin), menuButtonISR, RISING);
+    attachInterrupt(digitalPinToInterrupt(calendarButtonPin), calendarButtonISR, FALLING);
+    attachInterrupt(digitalPinToInterrupt(selectButtonPin), selectButtonISR, FALLING);
+    attachInterrupt(digitalPinToInterrupt(menuButtonPin), menuButtonISR, FALLING);
+
+    /*
+    attachInterrupt(digitalPinToInterrupt(selectButtonPin), selectButtonChange, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(menuButtonPin), menuButtonChange, CHANGE);
+    */
 
     display.begin();
     display.clearDisplay();
     display.cp437(true); // use the right character codes
     display.setFont(&FreeSerif12pt7b);
     display.setRotation(1);
+
+    display.setCursor(5, 100);
+    display.setTextColor(BLACK);
+    display.println("HELLOOOO");
+    delay(1000);
 
     if (!rtc.begin()) {
         Serial.println("Couldn't find RTC");
@@ -293,12 +279,94 @@ void setup() {
     }
 
     // set the RTC to the date & time this sketch was compiled
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    //Serial.println("Adjusting time at start");
+    //rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    DateTime now = rtc.now();
+    Serial.printf("Starting time is: %d:%02d\n", now.hour(), now.minute());
 }
 
 void loop() {
+    /*
+    display.clearDisplay();
+    display.setCursor(5, 100);
+    display.setTextColor(BLACK);
+    if (menuButtonDown) {
+      display.println("Menu button down");
+    } else {
+      display.println("Menu button up");
+    }
+    if (selectButtonDown) {
+      display.println("Select button down");
+    } else {
+      display.println("Select button up");
+    }
+    display.refresh();
+    delay(300);
+    return;
+    */
+    if (selectPushed) {
+        selectPushed = false;
+        if (isMenuMode) {
+            displayNeedsClear = true;
+            DateTime now = rtc.now();
+            int new_hour = now.hour();
+            int new_minute = now.minute();
+            int new_year = now.year();
+            int new_month = now.month();
+            int new_day = now.day();
+            boolean adjustTime = false;
+            switch (menuMode) {
+                case Hour:
+                    new_hour = (new_hour + 1) % 24;
+                    adjustTime = true;
+                    break;
+                case Minute:
+                    new_minute = (new_minute + 1) % 60;
+                    adjustTime = true;
+                    break;
+                case Day:
+                    new_day = (new_day + 1) % monthDays[new_month - 1];
+                    adjustTime = true;
+                    break;
+                case Month:
+                    new_month = (new_month + 1) % 12;
+                    adjustTime = true;
+                    break;
+                case Year:
+                    new_year += 1;
+                    adjustTime = true;
+                    break;
+                case Style:
+                    switch (displayMode) {
+                        case Normal:
+                            if (clock24) {
+                                displayMode = Text;
+                                clock24 = false;
+                            } else {
+                                clock24 = true;
+                            }
+                            break;
+                        case Text:
+                            if (clock24) {
+                                displayMode = Normal;
+                                clock24 = false;
+                            } else {
+                                clock24 = true;
+                            }
+                            break;
+                    }
+                    break;
+            }
+
+            if (adjustTime) {
+                Serial.printf("Adjusting time\n");
+                rtc.adjust(DateTime(new_year, new_month, new_day, new_hour, new_minute, 0));
+            }
+        }
+    }
+
     if (isMenuHolding) {
-        if (digitalRead(menuButtonPin) == LOW) {
+        if (digitalRead(menuButtonPin) == HIGH) {
             isMenuHolding = false;
         } else if (millis() - menuDownStart > MENU_HOLD_DELAY) {
             isMenuHolding = false;
@@ -311,7 +379,7 @@ void loop() {
     if (isMenuMode) {
         delayDuration = 100;
     } else {
-        delayDuration = 1000;
+        delayDuration = 500;
     }
 
     if (showingCalendar && millis() - showCalendarStart > SHOW_DATE_DELAY) {
@@ -440,7 +508,7 @@ void loop() {
                     int hours = now.hour();
                     bool am = hours < 12;
                     if (!clock24) {
-                        hours = hours / 12;
+                        hours = hours % 12;
                         if (hours == 0) {
                             hours = 12;
                         }
@@ -465,6 +533,7 @@ void loop() {
                         sprintf(buffer, "%s", am ? "AM" : "PM");
                         printField(105, 80, 30, 20, Left, buffer, isMenuMode && menuMode == Hour);
                     }
+                    Serial.printf("Time: %d:%02d\n", hours, now.minute());
                 }
                 break;
         }
